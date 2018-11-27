@@ -1760,9 +1760,6 @@ axes.drawOne = function(gd, ax, opts) {
 
     if(ax.type === 'multicategory') {
         seq.push(function() {
-            // TODO?
-            // drawDividers()
-
             var secondaryLabelVals = [];
             var lookup = {};
             for(i = 0; i < vals.length; i++) {
@@ -1774,6 +1771,7 @@ axes.drawOne = function(gd, ax, opts) {
                 }
             }
             for(var k in lookup) {
+                // TODO fill in xbnd?
                 secondaryLabelVals.push(tickTextObj(ax, Lib.interp(lookup[k], 0.5), k));
             }
 
@@ -1786,6 +1784,7 @@ axes.drawOne = function(gd, ax, opts) {
                 var bb = thisLabel.node().getBoundingClientRect();
                 labelHeight = Math.max(labelHeight, bb.height);
             });
+            ax._labelHeight = labelHeight;
 
             var secondarayPosition;
             if(ax.side === 'bottom') {
@@ -1807,6 +1806,14 @@ axes.drawOne = function(gd, ax, opts) {
                 labelXFn: secondaryLabelFns.labelXFn,
                 labelYFn: secondaryLabelFns.labelYFn,
                 labelAnchorFn: secondaryLabelFns.labelAnchorFn,
+            });
+        });
+
+        seq.push(function() {
+            return drawDividers(gd, ax, {
+                vals: tickVals,
+                layer: mainAxLayer,
+                transFn: transFn
             });
         });
     }
@@ -2396,6 +2403,8 @@ axes.drawLabels = function(gd, ax, opts) {
                 var gap = 2;
                 if(ax.ticks) gap += ax.tickwidth / 2;
 
+                // TODO should secondary labels also fall into this fix-overlap regime?
+
                 for(i = 0; i < lbbArray.length; i++) {
                     var xbnd = vals[i].xbnd;
                     var lbb = lbbArray[i];
@@ -2436,6 +2445,34 @@ axes.drawLabels = function(gd, ax, opts) {
     if(done && done.then) gd._promises.push(done);
     return done;
 };
+
+function drawDividers(gd, ax, opts) {
+    var cls = ax._id + 'divider';
+
+    var ticks = opts.layer.selectAll('path.' + cls)
+        .data(opts.vals, makeDataFn(ax));
+
+    ticks.exit().remove();
+
+    var pad = (ax.linewidth || 1) / 2;
+    var sgn = axes.getTickSigns(ax)[2];
+    var currentSecondaryLabel;
+
+    ticks.enter().insert('path', ':first-child')
+        .classed(cls, 1)
+        .classed('crisp', 1)
+        .call(Color.stroke, ax.tickcolor)
+        .style('stroke-width', Drawing.crispRound(gd, ax.tickwidth, 1) + 'px')
+        .attr('d', function(d, i) {
+            var len = (d.text2 === currentSecondaryLabel && i < opts.vals.length - 1) ?
+                ax._labelHeight :
+                ax._labelHeight * 2;
+            currentSecondaryLabel = d.text2;
+            return 'M0,' + (ax._mainLinePosition + pad * sgn) + 'v' + (len * sgn);
+        });
+
+    ticks.attr('transform', opts.transFn);
+}
 
 function drawTitle(gd, ax) {
     var fullLayout = gd._fullLayout;
